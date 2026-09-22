@@ -67,3 +67,24 @@ func TestEmbeddedWeights(t *testing.T) {
 	t.Logf("embedded iot23-raw: shape=%dx%d p(malicious)=%.3f score=%+.3f",
 		iot.Shape().Frames, iot.Shape().BytesPerFrame, res3.Probability, res3.Score)
 }
+
+// TestAllEmbeddedWeightsLoad loads and runs every embedded model, so a corrupt
+// or stale weight file fails the build.
+func TestAllEmbeddedWeightsLoad(t *testing.T) {
+	names := Available()
+	if len(names) == 0 {
+		t.Fatal("no embedded weights found")
+	}
+	for _, name := range names {
+		clf, err := New(name)
+		if err != nil {
+			t.Fatalf("embedded %s: %v", name, err)
+		}
+		res, err := clf.Classify(image.New(clf.Shape()))
+		if err != nil {
+			t.Fatalf("%s classify: %v", name, err)
+		}
+		t.Logf("%-24s arch=%s %dx%d p(malicious)=%.3f",
+			name, clf.Model().Config().Arch, clf.Shape().Frames, clf.Shape().BytesPerFrame, res.Probability)
+	}
+}
