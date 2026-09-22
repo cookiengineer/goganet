@@ -34,10 +34,16 @@ func extract(archive, scenario, out string) error {
 		return err
 	}
 	defer f.Close()
+	return extractTar(bzip2.NewReader(f), scenario, out)
+}
 
+// extractTar walks a plain tar stream and writes the requested scenario into
+// out. It is separated from extract so that it can be tested without a bzip2
+// writer (the standard library only provides a reader).
+func extractTar(r io.Reader, scenario, out string) error {
 	prefix := "CTU-13-Dataset/" + scenario + "/"
 	dest := filepath.Join(out, scenario)
-	tr := tar.NewReader(bzip2.NewReader(f))
+	tr := tar.NewReader(r)
 
 	extracted := 0
 	for {
@@ -56,7 +62,7 @@ func extract(archive, scenario, out string) error {
 			continue
 		}
 		clean := filepath.Clean(rel)
-		if clean == "." || strings.HasPrefix(clean, "..") {
+		if clean == "." || strings.HasPrefix(clean, "..") || filepath.IsAbs(clean) {
 			continue
 		}
 		target := filepath.Join(dest, clean)
@@ -74,13 +80,11 @@ func extract(archive, scenario, out string) error {
 				return err
 			}
 			extracted++
-			fmt.Println("extracted", target)
 		}
 	}
 	if extracted == 0 {
 		return fmt.Errorf("no files found for scenario %q", scenario)
 	}
-	fmt.Printf("done: %d files into %s\n", extracted, dest)
 	return nil
 }
 

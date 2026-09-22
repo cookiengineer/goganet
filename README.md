@@ -77,19 +77,27 @@ adapter/         DNS, HTTP/1, HTTP/2, HTTP/3, SNMP, ICMP and TLS adapters
 adapter/session/ session grouping and CTU-13 binetflow label joining
 adapter/pipeline/ end-to-end read -> decode -> group -> render helper
 classifiers/     embedded ready-to-use weights and registry
-examples/        extract-ctu13, analyze-ctu13, train-ctu13, benchmark-ctu13,
-                 make-weights, classify-session, inspect-image
+examples/        extract-ctu13, analyze-ctu13, train-ctu13, train-iot23,
+                 benchmark-ctu13, make-weights, classify-session, inspect-image
 benchmarks/      correctness, throughput and convergence tests
 ```
 
 ## Workflow
 
-The CTU-13 archive is plain bzip2 and can be extracted with the standard
-library alone (no password). To extract every scenario with the system tar:
+Download and extract both datasets with the helper script. It skips downloads
+whose files already exist and extraction whose directories are already
+populated, so it is safe to re-run:
 
 ```sh
-tar -xjf datasets/CTU-13-Dataset.tar.bz2 -C datasets/ctu-13 --strip-components=1
-# or a single scenario with the stdlib-only extractor
+./download-datasets.sh                # CTU-13 + IoT-23
+./download-datasets.sh --only ctu     # just CTU-13
+./download-datasets.sh --force        # re-download
+./download-datasets.sh --verify       # gzip/bzip2 integrity check before extracting
+```
+
+A single CTU-13 scenario can also be extracted with the stdlib-only extractor:
+
+```sh
 go run ./examples/extract-ctu13 -scenario 4
 ```
 
@@ -98,11 +106,20 @@ Inspect the protocol and label balance of a scenario, then train and benchmark:
 ```sh
 go run ./examples/analyze-ctu13 -dir datasets/ctu-13/4
 
-# Whole dataset, one protocol, saved to classifiers/weights/http1.ggnt
+# Whole CTU-13 dataset, one protocol, saved to classifiers/weights/http1.ggnt
 go run ./examples/train-ctu13 -dir datasets/ctu-13 -protocol http1 -arch conv -epochs 10
 
 # Benchmark a saved or embedded model on a cross-scenario holdout
 go run ./examples/benchmark-ctu13 -dir datasets/ctu-13 -protocol http1 -holdout 1,8
+```
+
+IoT-23 stores one directory per capture containing PCAPs and a Zeek
+`conn.log.labeled` file. `train-iot23` discovers captures recursively and joins
+labels from the Zeek log, so the same flags apply:
+
+```sh
+go run ./examples/train-iot23 -dir datasets/iot-23 -protocol http1 -arch conv -epochs 10
+go run ./examples/train-iot23 -dir datasets/iot-23 -protocol http1 -holdout Capture-1
 ```
 
 Protocol adapters currently cover `dns`, `http1`, `http2`, `http3` (QUIC,

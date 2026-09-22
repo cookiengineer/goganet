@@ -23,12 +23,14 @@ func (http2Adapter) Match(f *net.Frame) bool {
 		return true
 	}
 	// An HTTP/2 frame has a 9-byte header: 24-bit length, 8-bit type, 8-bit
-	// flags, 31-bit stream id. The type must be one of the known values.
-	if len(f.Payload) >= 9 {
-		typ := f.Payload[3]
-		if typ <= 0x09 || typ == 0x0a || typ == 0x0b || typ == 0x0c {
-			if f.SrcPort == 8080 || f.DstPort == 8080 {
-				return len(f.Payload) >= 9
+	// flags, 31-bit stream id. On the usual cleartext port we accept a frame
+	// whose declared length and type are plausible.
+	if f.SrcPort == 8080 || f.DstPort == 8080 {
+		if len(f.Payload) >= 9 {
+			length := int(f.Payload[0])<<16 | int(f.Payload[1])<<8 | int(f.Payload[2])
+			typ := f.Payload[3]
+			if length <= len(f.Payload)-9 && typ <= 0x09 {
+				return true
 			}
 		}
 	}
