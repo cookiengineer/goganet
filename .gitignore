@@ -1,0 +1,12 @@
+# Extracted datasets are never committed.
+/datasets/ctu-13/
+/datasets/CTU-13-Dataset/
+/datasets/CTU-13-Dataset.tar.bz2
+/datasets/password.txt
+
+# Build artifacts
+/bin/
+*.test
+*.out
+*.prof
+
