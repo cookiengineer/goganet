@@ -78,7 +78,8 @@ adapter/session/ session grouping and CTU-13 binetflow label joining
 adapter/pipeline/ end-to-end read -> decode -> group -> render helper
 classifiers/     embedded ready-to-use weights and registry
 examples/        extract-ctu13, analyze-ctu13, train-ctu13, train-iot23,
-                 benchmark-ctu13, make-weights, classify-session, inspect-image
+                 train-bundled, benchmark-ctu13, make-weights, classify-session,
+                 inspect-image
 benchmarks/      correctness, throughput and convergence tests
 ```
 
@@ -163,7 +164,27 @@ benign corpus and use `-holdout`.
 Models train in pure Go (dense or conv, exact WGAN-GP) and serialize to a
 versioned `GGNT` binary via `wcgan.Save` / `wcgan.Load`. The `classifiers`
 package embeds every `classifiers/weights/*.ggnt` file with `go:embed`, so a
-trained classifier can be used without any external files:
+trained classifier can be used without any external files.
+
+The repository ships a single model, `classifiers/weights/bundled.ggnt`, trained
+on every campaign from both datasets (CTU-13's 7 scenarios and IoT-23's 23
+captures) with the `raw` adapter, so each campaign's flows are represented. It
+uses the `8x64x2` window:
+
+```sh
+# Reproduce the bundled model (all campaigns, bounded per capture).
+go run ./examples/train-bundled -epochs 3
+
+# Use it.
+go run ./examples/classify-session -pcap capture.pcap -protocol raw
+```
+
+On its held-out session split it reaches accuracy 0.917, balanced accuracy
+0.867, specificity 0.780 and AUC 0.928 (the split is random, so the same
+captures appear in train and test; treat it as indicative, not a cross-campaign
+score).
+
+To train a per-protocol model instead:
 
 ```sh
 # Train a per-protocol model; it is written to classifiers/weights/dns.ggnt.
@@ -173,13 +194,12 @@ go run ./examples/train-ctu13 -dir datasets/ctu-13/4 -protocol dns -arch conv
 go run ./examples/classify-session -pcap capture.pcap -protocol dns
 ```
 
-- `classifiers.New("dns")` returns the embedded model
+- `classifiers.New("bundled")` returns the embedded model
 - `classifiers.Available()` lists the embedded protocols
 - `classifiers.Wrap()` uses a model held in memory instead
 
 Embedding is resolved at compile time, so rebuild after adding or updating a
-weight file. `examples/make-weights` produces the synthetic `selftest` fixture
-used by the embed test.
+weight file. `examples/make-weights` can generate a small synthetic fixture.
 
 ## License
 
