@@ -54,4 +54,16 @@ func TestEmbeddedWeights(t *testing.T) {
 	}
 	t.Logf("embedded http1: shape=%dx%d p(malicious)=%.3f score=%+.3f",
 		http1.Shape().Frames, http1.Shape().BytesPerFrame, res2.Probability, res2.Score)
+
+	// The IoT-23 raw model (all-flow classifier) must also be embedded.
+	iot, err := New("iot23-raw")
+	if err != nil {
+		t.Fatalf("embedded iot23-raw weights: %v", err)
+	}
+	res3, err := iot.Classify(image.New(iot.Shape()))
+	if err != nil {
+		t.Fatalf("iot23-raw classify: %v", err)
+	}
+	t.Logf("embedded iot23-raw: shape=%dx%d p(malicious)=%.3f score=%+.3f",
+		iot.Shape().Frames, iot.Shape().BytesPerFrame, res3.Probability, res3.Score)
 }

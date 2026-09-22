@@ -169,6 +169,26 @@ func TestAdapterPrecedence(t *testing.T) {
 	}
 }
 
+func TestRawFallback(t *testing.T) {
+	// A TCP flow on an unadapted port falls back to raw.
+	f := frameProto(net.ProtoTCP, 40000, 12345, []byte("payload"))
+	if got := For(f); got == nil || got.Name() != "raw" {
+		t.Fatalf("raw fallback = %v", got)
+	}
+	if got := ByName("raw").Bytes(f); string(got) != "payload" {
+		t.Fatalf("raw bytes = %q", got)
+	}
+	// No payload: the link-layer frame is used.
+	g := &net.Frame{Protocol: net.ProtoUDP, SrcPort: 1, DstPort: 2, Raw: []byte("frame")}
+	if got := ByName("raw").Bytes(g); string(got) != "frame" {
+		t.Fatalf("raw fallback bytes = %q", got)
+	}
+	// Specific adapters still take precedence.
+	if got := For(frameProto(net.ProtoUDP, 50000, 53, nil)); got == nil || got.Name() != "dns" {
+		t.Fatalf("dns precedence lost: %v", got)
+	}
+}
+
 // TestDecodeThenAdapt exercises the full link/network decode followed by
 // protocol adaptation for a UDP DNS packet.
 func TestDecodeThenAdapt(t *testing.T) {

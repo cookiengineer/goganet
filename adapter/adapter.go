@@ -56,4 +56,6 @@ func init() {
 	Register(http1Adapter{})
 	Register(http3Adapter{})
 	Register(tlsAdapter{})
+	// The generic transport fallback is registered last.
+	Register(rawAdapter{})
 }

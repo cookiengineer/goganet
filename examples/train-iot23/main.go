@@ -37,6 +37,7 @@ type options struct {
 	arch        string
 	maxPackets  int
 	maxSessions int
+	maxLogLines int
 	epochs      int
 	batch       int
 	ncritic     int
@@ -58,6 +59,7 @@ func main() {
 	flag.StringVar(&o.arch, "arch", "conv", "architecture: dense or conv")
 	flag.IntVar(&o.maxPackets, "maxpackets", 300000, "max packets read per pcap")
 	flag.IntVar(&o.maxSessions, "maxsessions", 6000, "max labelled sessions across the dataset")
+	flag.IntVar(&o.maxLogLines, "maxloglines", 2000000, "max Zeek log lines to scan per capture (0 = unlimited)")
 	flag.IntVar(&o.epochs, "epochs", 15, "training epochs")
 	flag.IntVar(&o.batch, "batch", 32, "batch size")
 	flag.IntVar(&o.ncritic, "ncritic", 2, "critic updates per generator update")
@@ -112,8 +114,9 @@ func run(o options) error {
 			capSessions = append(capSessions, ss...)
 		}
 		matched := 0
+		capSessions = dedupeSessions(capSessions)
 		if cap.zeek != "" {
-			if matched, err = session.JoinZeekFile(capSessions, cap.zeek); err != nil {
+			if matched, err = session.JoinZeekFileLimit(capSessions, cap.zeek, o.maxLogLines); err != nil {
 				return fmt.Errorf("%s: %w", cap.name, err)
 			}
 		}
@@ -335,6 +338,22 @@ func discoverIoTCaptures(root string) ([]iotCapture, error) {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].name < out[j].name })
 	return out, nil
+}
+
+// dedupeSessions removes sessions that share a bidirectional flow key. IoT-23
+// captures sometimes ship overlapping PCAPs (full plus derived subsets), which
+// would otherwise double-count the same flow.
+func dedupeSessions(in []*session.Session) []*session.Session {
+	seen := make(map[net.SessionKey]bool, len(in))
+	out := in[:0]
+	for _, s := range in {
+		if seen[s.Key] {
+			continue
+		}
+		seen[s.Key] = true
+		out = append(out, s)
+	}
+	return out
 }
 
 func splitNonEmpty(s, sep string) []string {

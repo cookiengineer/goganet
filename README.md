@@ -123,32 +123,40 @@ go run ./examples/train-iot23 -dir datasets/iot-23 -protocol http1 -holdout Capt
 ```
 
 Protocol adapters currently cover `dns`, `http1`, `http2`, `http3` (QUIC,
-opaque), `snmp`, `icmp` and `tls` (opaque). Encrypted transports are not
-decrypted; their records are rendered as bytes.
+opaque), `snmp`, `icmp`, `tls` (opaque) and a generic `raw` fallback that
+matches any TCP/UDP/ICMP flow. Encrypted transports are not decrypted; their
+records are rendered as bytes. Use `-protocol raw` to train a single classifier
+across heterogeneous traffic (as needed for IoT-23).
 
-## Benchmarking Pitfalls
+## Dataset comparison
 
-The public CTU-13 tarball used here contains **botnet-filtered** captures
-(`botnet-capture-*.pcap`) plus full per-flow labels (`capture*.binetflow`); it
-does **not** include the full mixed-traffic captures.
+Both datasets were trained with the convolutional model on `8x64x2` window
+images, LeakyReLU 0.2, no BatchNorm, exact WGAN-GP penalty.
 
-Benign raw packets are therefore scarce (a few hundred sessions across the
-extracted scenarios), which caps how far a binary packet-image classifier
-can generalise.
+CTU-13 ships **botnet-filtered** captures plus full flow labels but **no full
+mixed-traffic captures**, so benign raw packets are scarce. A random session
+split looks excellent, but that is optimistic: the same scenarios appear in
+train and test, and under a cross-scenario holdout the model degrades:
 
-Measured on the seven extracted scenarios with the convolutional model
-(`http1`, `8x64x2`, 4000 sessions, 10 epochs):
+| Dataset | Adapter | Split | AUC(clf) | Bal. acc | Specificity |
+|---|---|---|---|---|---|
+| CTU-13 | http1 | random | 0.998 | 0.999 | 1.000 |
+| CTU-13 | http1 | holdout `{1,8}` | 0.537 | 0.746 | 0.500 |
+| CTU-13 | raw | random | 0.989 | 0.833 | 0.667 |
+| CTU-13 | raw | holdout `{1,8}` | 0.767 | 0.580 | 0.162 |
+| **IoT-23** | **raw** | **random** | **0.978** | **0.962** | **0.947** |
+| **IoT-23** | **raw** | **holdout `Capture-1-1`** | **0.978** | **0.978** | **0.957** |
 
-| Split | AUC(classifier) | AUC(critic score) | Balanced accuracy |
-|---|---|---|---|
-| Random session split | 0.998 | 0.591 | 0.999 |
-| Cross-scenario holdout `{1,8}` | 0.537 | 0.738 | 0.746 |
+CTU-13 has ~99% malicious sessions in its filtered captures (only tens of benign
+sessions survive), so a classifier learns to predict "malicious" for almost
+everything and specificity collapses. IoT-23 contains large benign volumes
+(device background traffic and honeypot captures, ~20-30% benign in the sampled
+set), which is enough to train a genuinely balanced classifier that still
+generalises to a completely held-out capture. The key difference is the data,
+not the model.
 
-The random split is optimistic (the same scenarios appear in train and test).
-On unseen scenarios the classifier head overfits, while the WGAN critic's
-realness score transfers better (AUC 0.738) and is the more trustworthy signal.
-For a rigorous benign-vs-malicious benchmark, supply the full CTU-13 captures
-or an additional benign corpus and use `-holdout`.
+For a rigorous CTU-13 benchmark, supply the full captures or an additional
+benign corpus and use `-holdout`.
 
 ## Embedding pretrained weights
 

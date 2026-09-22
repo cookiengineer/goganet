@@ -72,6 +72,58 @@ func TestJoinZeekFile(t *testing.T) {
 	}
 }
 
+func TestJoinZeekSpacePackedLabel(t *testing.T) {
+	// Mimics the real IoT-23 layout: the trailing "label   detailed-label"
+	// columns are appended with spaces rather than tabs.
+	names := []string{
+		"ts", "uid", "id.orig_h", "id.orig_p", "id.resp_h", "id.resp_p",
+		"proto", "service", "duration", "orig_bytes", "resp_bytes", "conn_state",
+		"local_orig", "local_resp", "missed_bytes", "history", "orig_pkts",
+		"orig_ip_bytes", "resp_pkts", "resp_ip_bytes", "tunnel_parents",
+	}
+	header := "#fields\t" + strings.Join(names, "\t") + "   label   detailed-label"
+	values := []string{
+		"1528123456.123456", "C1", "10.0.0.1", "40000", "1.2.3.4", "1234",
+		"tcp", "-", "1", "1", "1", "SF", "-", "-", "0", "S", "1", "60", "0", "0", "-",
+	}
+	row := strings.Join(values, "\t") + "   malicious   PartOfAHorizontalPortScan"
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "conn.log.labeled")
+	if err := os.WriteFile(path, []byte(header+"\n"+row+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := &Session{Key: makeKey(netip.MustParseAddr("10.0.0.1"), 40000, netip.MustParseAddr("1.2.3.4"), 1234, net.ProtoTCP)}
+	n, err := JoinZeekFile([]*Session{s}, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 || !s.Labeled || !s.Malicious || s.Label != "malicious" {
+		t.Fatalf("space-packed label not parsed: n=%d session=%+v", n, s)
+	}
+}
+
+func TestJoinZeekFileLimit(t *testing.T) {
+	names := []string{"ts", "uid", "id.orig_h", "id.orig_p", "id.resp_h", "id.resp_p", "proto", "label"}
+	header := "#fields\t" + strings.Join(names, "\t")
+	other := "1.0\tC1\t10.9.9.9\t1\t10.9.9.10\t2\tudp\tBenign"
+	match := "2.0\tC2\t10.0.0.1\t40000\t8.8.8.8\t53\tudp\tBenign"
+	dir := t.TempDir()
+	path := filepath.Join(dir, "conn.log.labeled")
+	if err := os.WriteFile(path, []byte(strings.Join([]string{header, other, match}, "\n")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := &Session{Key: makeKey(netip.MustParseAddr("10.0.0.1"), 40000, netip.MustParseAddr("8.8.8.8"), 53, net.ProtoUDP)}
+
+	// Budget of two lines only reaches the header and the first row.
+	if n, err := JoinZeekFileLimit([]*Session{s}, path, 2); err != nil || n != 0 {
+		t.Fatalf("limited join n=%d err=%v", n, err)
+	}
+	if n, err := JoinZeekFileLimit([]*Session{s}, path, 0); err != nil || n != 1 {
+		t.Fatalf("unlimited join n=%d err=%v", n, err)
+	}
+}
+
 func TestJoinZeekFileNoHeader(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "conn.log.labeled")
